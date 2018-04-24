@@ -1,43 +1,64 @@
-//客户端代码：  
-#include <WINSOCK2.H>  
 #include <stdio.h>  
+#include <winsock2.h>  
+#include <Windows.h>  
+
 #pragma comment(lib,"ws2_32.lib")  
+#define  PORT 6000  
 
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
-int main()
+int main(int argc, char * argv[])
 {
-	int err;
-	WORD versionRequired;
-	WSADATA wsaData;
-	versionRequired = MAKEWORD(1, 1);
-	err = WSAStartup(versionRequired, &wsaData);//协议库的版本信息  
-
-	if (!err)
+	//初始化网络环境  
+	WSADATA wsa;
+	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
 	{
-		printf("客户端嵌套字已经打开!\n");
+		printf("WSAStartup failed\n");
+		return -1;
 	}
-	else
+	// 初始化完成，创建一个TCP的socket  
+	SOCKET sServer = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (sServer == INVALID_SOCKET)
 	{
-		printf("客户端的嵌套字打开失败!\n");
-		return 0;//结束  
+		printf("socket failed\n");
+		return -1;
 	}
-	SOCKET clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-	SOCKADDR_IN clientsock_in;
+	//指定连接的服务端信息  
+	SOCKADDR_IN addrServ;
+	addrServ.sin_family = AF_INET;
+	addrServ.sin_port = htons(PORT);
+	//客户端只需要连接指定的服务器地址，127.0.0.1是本机的回环地址  
+	addrServ.sin_addr.S_un.S_addr = inet_addr("127.0.0.1");
 
-	clientsock_in.sin_addr.S_un.S_addr = inet_addr("127.0.0.1");
-	clientsock_in.sin_family = AF_INET;
-	clientsock_in.sin_port = htons(6000);
-	//bind(clientSocket,(SOCKADDR*)&clientsock_in,strlen(SOCKADDR));//注意第三个参数  
-	//listen(clientSocket,5);  
-	connect(clientSocket, (SOCKADDR*)&clientsock_in, sizeof(SOCKADDR));//开始连接  
+	// 服务器Bind 客户端是进行连接  
+	int ret = connect(sServer, (SOCKADDR*)&addrServ, sizeof(SOCKADDR));//开始连接  
+	if (SOCKET_ERROR == ret)
+	{
+		printf("socket connect failed\n");
+		WSACleanup();
+		closesocket(sServer);
+		return -1;
+	}
+	//连接成功后，就可以进行通信了  
+	char szBuf[1024];
+	memset(szBuf, 0, sizeof(szBuf));
+	sprintf_s(szBuf, sizeof(szBuf), "Hello server");
+	//当服务端是recv的时候，客户端就需要send，若两端同时进行收发则会卡在这里，因为recv和send是阻塞的  
+	ret = send(sServer, szBuf, strlen(szBuf), 0);
+	if (SOCKET_ERROR == ret)
+	{
+		printf("socket send failed\n");
+		closesocket(sServer);
+		return -1;
+	}
 
-	char receiveBuf[100];
-	recv(clientSocket, receiveBuf, 101, 0);
-	printf("%s\n", receiveBuf);
-
-	send(clientSocket, "hello,this is client", strlen("hello,this is client") + 1, 0);
-	closesocket(clientSocket);
+	ret = recv(sServer, szBuf, sizeof(szBuf), 0);
+	if (SOCKET_ERROR == ret)
+	{
+		printf("socket recv failed\n");
+		closesocket(sServer);
+		return -1;
+	}
+	printf("%s\n", szBuf);//关闭连接  
+		closesocket(sServer);
 	WSACleanup();
-	//system("pause");
 	return 0;
 }
